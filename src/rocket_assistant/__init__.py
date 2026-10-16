@@ -1,0 +1,41 @@
+import argparse
+import os
+import threading
+import webbrowser
+from pathlib import Path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="rocket-assistant", description="Rocket League replay analyzer")
+    sub = parser.add_subparsers(dest="command")
+    serve = sub.add_parser("serve", help="run the web app (default)")
+    serve.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8765")))
+    serve.add_argument("--no-browser", action="store_true")
+    imp = sub.add_parser("import", help="import every .replay file in a folder")
+    imp.add_argument("folder", nargs="?", type=Path, help="defaults to your Rocket League Demos folder")
+    args = parser.parse_args()
+
+    from . import db
+    from .ingest import default_demos_folder, import_folder, refresh_outdated
+
+    db.init()
+    if args.command == "import":
+        folder = args.folder or default_demos_folder()
+        if not folder or not folder.is_dir():
+            parser.error("Replay folder not found; pass it explicitly")
+        print(f"Importing replays from {folder} ...")
+        print(import_folder(folder))
+        return
+
+    import uvicorn
+
+    if updated := refresh_outdated():
+        print(f"Re-analysed {updated} stored matches")
+    host = getattr(args, "host", "127.0.0.1")
+    port = getattr(args, "port", 8765)
+    url = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"
+    if not getattr(args, "no_browser", False):
+        threading.Timer(1.0, webbrowser.open, [url]).start()
+    print(f"Rocket Assistant running at {url}")
+    uvicorn.run("rocket_assistant.app:app", host=host, port=port, log_level="warning")

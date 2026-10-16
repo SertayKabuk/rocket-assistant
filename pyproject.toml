@@ -1,0 +1,37 @@
+[project]
+name = "rocket-assistant"
+version = "0.1.0"
+description = "Upload Rocket League replays and rate every player on attack, defence, boost and speed"
+authors = [
+    { name = "Sertay Kabuk", email = "3465905+SertayKabuk@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.143.3",
+    "python-multipart>=0.0.32",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+rocket-assistant = "rocket_assistant:main"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "FURB"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

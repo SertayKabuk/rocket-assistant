@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rocket Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/"><span class="brand-mark" aria-hidden="true"></span><span>Rocket Assistant</span></a>
+    <nav class="nav">
+      <a href="#/" data-nav="home">Home</a>
+      <a href="#/matches" data-nav="matches">Matches</a>
+      <a href="#/leaderboard" data-nav="leaderboard">Leaderboard</a>
+      <a href="#/ratings" data-nav="ratings">How ratings work</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="btn primary" id="upload-btn" type="button">↑ <span>Upload replays</span></button>
+    <input type="file" id="file-input" accept=".replay" multiple hidden>
+  </header>
+  <main id="app"></main>
+  <div class="drop-overlay" id="drop-overlay"><div>Drop .replay files to upload</div></div>
+  <div class="tip" id="tip" role="tooltip"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

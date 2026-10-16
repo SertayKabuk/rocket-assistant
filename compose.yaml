@@ -1,0 +1,14 @@
+services:
+  rocket-assistant:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      - rocket-data:/data  # SQLite database and uploaded replays
+    environment:
+      ROCKET_MAX_UPLOAD_MB: "30"
+      ROCKET_MAX_FILES_PER_UPLOAD: "50"
+    restart: unless-stopped
+
+volumes:
+  rocket-data:
