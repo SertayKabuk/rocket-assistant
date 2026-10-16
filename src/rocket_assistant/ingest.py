@@ -16,7 +16,7 @@ from pathlib import Path
 from . import db
 from .analyze import ANALYZER_VERSION, analyze, summarize
 from .config import MAX_UPLOAD_BYTES, REPLAY_DIR, TOOLS_DIR
-from .ratings import RATING_VERSION, rate_match
+from .ratings import model_version, rate_match
 
 RRROCKET_VERSION = "0.11.7"
 RRROCKET_TARGETS = {
@@ -92,9 +92,15 @@ def ingest_file(path, original_name=None):
     analysis = rate_match(analyze(_parse(path, network=True), header))
     REPLAY_DIR.mkdir(parents=True, exist_ok=True)
     stored = REPLAY_DIR / f"{match_id}.replay"
-    if path.resolve() != stored.resolve():
+    copied = path.resolve() != stored.resolve()
+    if copied:
         shutil.copyfile(path, stored)
-    db.save_match(match_id, analysis, original_name, _now(), ANALYZER_VERSION)
+    try:
+        db.save_match(match_id, analysis, original_name, _now(), ANALYZER_VERSION)
+    except Exception:
+        if copied:
+            stored.unlink(missing_ok=True)  # don't leave an orphan file without a database row
+        raise
     return {"status": "added", "match": _brief(match_id, analysis)}
 
 
@@ -122,13 +128,26 @@ def refresh_outdated():
     for row in db.all_matches_for_refresh():
         stored = REPLAY_DIR / f"{row['id']}.replay"
         reanalyze = row["analyzer_version"] != ANALYZER_VERSION and stored.exists()
-        if not reanalyze and row["rating_version"] == RATING_VERSION:
+        if not reanalyze and row["rating_version"] == model_version():
             continue
         analysis = _build_analysis(stored) if reanalyze else rate_match(db.load_analysis(row["id"]))
         version = ANALYZER_VERSION if reanalyze else row["analyzer_version"]
         db.save_match(row["id"], analysis, row["file"], row["uploaded_at"], version)
         updated += 1
     return updated
+
+
+def import_orphans():
+    """Analyse stored replay files that have no database row (e.g. left behind by a failed save)."""
+    known = {row["id"] for row in db.all_matches_for_refresh()}
+    orphans = [p for p in REPLAY_DIR.glob("*.replay") if p.stem not in known] if REPLAY_DIR.exists() else []
+    added = 0
+    for path in orphans:
+        try:
+            added += ingest_file(path)["status"] == "added"
+        except Exception as e:  # noqa: BLE001 - a broken file shouldn't stop the server starting
+            print(f"  could not import {path.name}: {e}")
+    return added
 
 
 def import_folder(folder):

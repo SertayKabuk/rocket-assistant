@@ -1,0 +1,238 @@
+{
+ "generatedAt": "2026-10-16T22:33:44+00:00",
+ "matches": 310,
+ "percentiles": [
+  0.1,
+  0.9
+ ],
+ "modes": {
+  "1": {
+   "rows": 64,
+   "priors": {
+    "shooting": 0.5985,
+    "saveRate": 0.2967
+   },
+   "metrics": {
+    "goals5": [
+     1.234,
+     6.493
+    ],
+    "shots5": [
+     3.554,
+     10.057
+    ],
+    "assists5": null,
+    "offThirdPct": [
+     15.2,
+     33.55
+    ],
+    "shootingPct": [
+     44.41,
+     76.833
+    ],
+    "saveRate": [
+     14.835,
+     44.835
+    ],
+    "behindBallPct": [
+     66.12,
+     83.8
+    ],
+    "conceded5": [
+     1.234,
+     6.493
+    ],
+    "emptyBoostPct": [
+     8.63,
+     31.98
+    ],
+    "collectedPerMin": [
+     284.574,
+     485.968
+    ],
+    "smallPadsPerMin": [
+     6.665,
+     10.802
+    ],
+    "fullBoostPct": [
+     9.72,
+     23.36
+    ],
+    "avgSpeed": [
+     1225.5,
+     1449.5
+    ],
+    "supersonicPct": [
+     3.92,
+     11.97
+    ],
+    "slowPct": [
+     44.06,
+     62.08
+    ],
+    "highAirPct": [
+     1.23,
+     6.11
+    ],
+    "scorePerMin": [
+     100.634,
+     232.062
+    ]
+   }
+  },
+  "2": {
+   "rows": 456,
+   "priors": {
+    "shooting": 0.4666,
+    "saveRate": 0.1986
+   },
+   "metrics": {
+    "goals5": [
+     0.0,
+     3.209
+    ],
+    "shots5": [
+     0.94,
+     5.66
+    ],
+    "assists5": [
+     0.0,
+     1.901
+    ],
+    "offThirdPct": [
+     14.1,
+     29.7
+    ],
+    "shootingPct": [
+     31.107,
+     64.44
+    ],
+    "saveRate": [
+     7.944,
+     34.495
+    ],
+    "behindBallPct": [
+     65.4,
+     79.05
+    ],
+    "conceded5": [
+     0.966,
+     5.512
+    ],
+    "emptyBoostPct": [
+     6.65,
+     24.85
+    ],
+    "collectedPerMin": [
+     296.535,
+     471.46
+    ],
+    "smallPadsPerMin": [
+     6.51,
+     11.208
+    ],
+    "fullBoostPct": [
+     8.9,
+     23.35
+    ],
+    "avgSpeed": [
+     1276.5,
+     1505.5
+    ],
+    "supersonicPct": [
+     4.65,
+     12.95
+    ],
+    "slowPct": [
+     40.55,
+     58.2
+    ],
+    "highAirPct": [
+     1.4,
+     6.7
+    ],
+    "scorePerMin": [
+     42.025,
+     143.075
+    ]
+   }
+  },
+  "3": {
+   "rows": 926,
+   "priors": {
+    "shooting": 0.4068,
+    "saveRate": 0.1455
+   },
+   "metrics": {
+    "goals5": [
+     0.0,
+     1.976
+    ],
+    "shots5": [
+     0.0,
+     3.882
+    ],
+    "assists5": [
+     0.0,
+     1.532
+    ],
+    "offThirdPct": [
+     12.1,
+     28.1
+    ],
+    "shootingPct": [
+     27.12,
+     57.84
+    ],
+    "saveRate": [
+     5.291,
+     26.367
+    ],
+    "behindBallPct": [
+     65.3,
+     79.9
+    ],
+    "conceded5": [
+     0.0,
+     4.837
+    ],
+    "emptyBoostPct": [
+     4.7,
+     23.75
+    ],
+    "collectedPerMin": [
+     224.87,
+     433.752
+    ],
+    "smallPadsPerMin": [
+     6.061,
+     10.658
+    ],
+    "fullBoostPct": [
+     7.95,
+     28.5
+    ],
+    "avgSpeed": [
+     1213.5,
+     1486.0
+    ],
+    "supersonicPct": [
+     3.3,
+     11.75
+    ],
+    "slowPct": [
+     41.5,
+     63.45
+    ],
+    "highAirPct": [
+     1.1,
+     6.7
+    ],
+    "scorePerMin": [
+     20.369,
+     103.707
+    ]
+   }
+  }
+ }
+}

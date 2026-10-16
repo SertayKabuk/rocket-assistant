@@ -1,4 +1,4 @@
-from conftest import make_analysis, make_player
+from conftest import make_adv, make_analysis, make_player
 
 from rocket_assistant import db
 
@@ -49,6 +49,11 @@ def test_match_and_profile_endpoints(client):
     assert profile["matches"] == 2
     assert profile["wins"] == 1
     assert len(profile["heatmap"]) == 24 * 30
+    assert profile["rank"] >= 1
+    assert profile["ratingsRaw"]["overall"] is not None
+    model = client.get("/api/model").json()
+    assert {"1", "2", "3"} <= model["modes"].keys()
+    assert model["categories"]["attack"][0]["benchmarks"]["2"]
     assert client.get("/api/players/steam:404").status_code == 404
 
 
@@ -60,3 +65,14 @@ def test_upload_rejects_non_replays(client):
 def test_frontend_is_served(client):
     assert "Rocket Assistant" in client.get("/").text
     assert client.get("/static/app.js").status_code == 200
+
+
+def test_profile_without_boost_data(client):
+    # Older replays have no boost data; averaging only None values must not crash the profile
+    no_boost = make_adv(avgBoost=None, emptyBoostPct=None, fullBoostPct=None, boostCollected=None,
+                        boostUsed=None, boostPerMin=None, bigPads=None, smallPads=None)
+    db.save_match("old", make_analysis([make_player(ME, "Me", 0, adv=no_boost), make_player(OTHER, "Other", 1)]),
+                  "old.replay", "2026-01-01T00:00:00", 3)
+    profile = client.get(f"/api/players/{ME}").json()
+    assert profile["adv"]["avgBoost"] is None
+    assert profile["ratings"]["boost"] is None

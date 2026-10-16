@@ -5,9 +5,9 @@
 """
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
-ANALYZER_VERSION = 3
+ANALYZER_VERSION = 7
 
 # Field geometry in Unreal units. Blue (team 0) defends -y, orange (team 1) defends +y.
 FIELD_X = 4096
@@ -124,6 +124,25 @@ class _PlayerAcc:
         self.boost_series = {}  # second -> boost %
 
 
+# Network UniqueId platform -> key prefix used by header PlayerStats (verified to give identical ids)
+NETWORK_PLATFORMS = {"Steam": "steam", "Epic": "epic", "PlayStation": "ps4", "Xbox": "dingo", "PsyNet": "nnx",
+                     "Switch": "nnx"}
+
+
+def _network_key(unique_id):
+    """Player key from a network UniqueId, in the same format as _player_key; None if it has no usable id."""
+    remote = (unique_id or {}).get("remote_id")
+    if not isinstance(remote, dict) or not remote:
+        return None
+    kind, value = next(iter(remote.items()))
+    prefix = NETWORK_PLATFORMS.get(kind)
+    ident = value.get("online_id") if isinstance(value, dict) else value
+    if not prefix or not ident or str(ident) == "0":
+        return None
+    local = unique_id.get("local_id") or 0  # split-screen guests share the host's account id
+    return f"{prefix}:{ident}:{local}" if local else f"{prefix}:{ident}"
+
+
 def _grid_index(x, y):
     gx = min(GRID_NX - 1, max(0, int((x + FIELD_X) / (2 * FIELD_X) * GRID_NX)))
     gy = min(GRID_NY - 1, max(0, int((y + FIELD_Y) / (2 * FIELD_Y) * GRID_NY)))
@@ -148,7 +167,7 @@ def analyze(replay, summary):
     car_boost = {}  # car actor -> boost component actor
     ball_id = None
     car_team = {}  # car actor -> team from paint
-    pri_name, pri_team_actor = {}, {}
+    pri_name, pri_team_actor, pri_key, pri_bot = {}, {}, {}, {}
     team_actor_num = {}  # team actor -> 0/1
     rb = {}  # actor -> (location, velocity)
     boost_amount = {}  # boost component actor -> raw 0..255
@@ -205,6 +224,10 @@ def analyze(replay, summary):
                 car_team[aid] = attr["TeamPaint"]["team"]
             elif prop == "Engine.PlayerReplicationInfo:PlayerName":
                 pri_name[aid] = attr.get("String")
+            elif prop == "Engine.PlayerReplicationInfo:UniqueId":
+                pri_key[aid] = _network_key(attr.get("UniqueId"))
+            elif prop == "Engine.PlayerReplicationInfo:bBot":
+                pri_bot[aid] = bool(attr.get("Boolean"))
             elif prop == "Engine.PlayerReplicationInfo:Team":
                 pri_team_actor[aid] = _actor_ref(attr.get("ActiveActor"))
             elif prop in ("TAGame.CarComponent_Boost_TA:ReplicatedBoost",
@@ -292,26 +315,57 @@ def analyze(replay, summary):
                     a.boost_series.setdefault(second, round(pct))
         frame_clock.append((round(live_clock, 2), seconds_remaining, overtime))
 
-    # Merge accumulators by player name (a player can get a new PRI after reconnecting)
-    by_name = {}
+    # Merge accumulators per player identity: the account id when the replay has one, else the name.
+    # A player who reconnects gets a new PRI actor but keeps their id.
+    groups, group_names, group_bots = {}, {}, set()
     for pri, a in acc.items():
         name = pri_name.get(pri)
-        if name is None:
+        ident = pri_key.get(pri) or (f"name:{name}" if name is not None else None)
+        if ident is None:
             continue
-        if name in by_name:
-            _merge(by_name[name], a)
+        group_names[ident] = name
+        if pri_bot.get(pri):
+            group_bots.add(ident)
+        if ident in groups:
+            _merge(groups[ident], a)
         else:
-            by_name[name] = a
+            groups[ident] = a
 
+    # Match scoreboard (header) players to identities, one-to-one: id and name agree, then id alone, then name
+    # alone when unambiguous. Older replays omit some ids from the header but keep them in the network data,
+    # and split-screen guests share their host's id in the header but have their own in the network data.
+    header = summary["players"]
+    matched = {}  # header index -> identity
+
+    def match(rule):
+        for i, p in enumerate(header):
+            taken = set(matched.values())
+            if i in matched:
+                continue
+            candidates = [g for g in groups if g not in taken and rule(p, g)]
+            if len(candidates) == 1:
+                matched[i] = candidates[0]
+
+    match(lambda p, g: g == p["key"] and group_names[g] == p["name"])
+    match(lambda p, g: g == p["key"])
+    match(lambda p, g: group_names[g] == p["name"])
+
+    header_key_counts = Counter(p["key"] for p in header)
     players = []
-    header_players = {p["name"]: p for p in summary["players"]}
-    all_names = list(header_players) + [n for n in by_name if n not in header_players]
-    for name in all_names:
-        base = dict(header_players.get(name) or {
-            "name": name, "key": f"name:{name}", "team": by_name[name].team or 0,
-            "platform": "", "bot": False, "score": 0, "goals": 0, "assists": 0, "saves": 0, "shots": 0,
-        })
-        a = by_name.get(name)
+    entries = [(dict(p), matched.get(i)) for i, p in enumerate(header)]
+    taken = set(matched.values())
+    entries += [({"name": group_names[g], "key": g, "team": groups[g].team or 0, "platform": "", "bot": g in group_bots,
+                  "score": 0, "goals": 0, "assists": 0, "saves": 0, "shots": 0}, g)
+                for g in groups if g not in taken]
+    for base, ident in entries:
+        if ident and not ident.startswith("name:") and (
+                base["key"].startswith("name:") or header_key_counts[base["key"]] > 1):
+            base["key"] = ident  # the network data has the real (or more specific) account id
+        a = groups.get(ident) if ident else None
+        if base["team"] not in (0, 1):  # header uses -1 for players who left; use the team they played on
+            base["team"] = a.team if a and a.team in (0, 1) else None
+            if base["team"] is None and not a and not base.get("score"):
+                continue  # empty scoreboard entry with no play data at all (e.g. a split-screen ghost)
         if a and a.time > 0:
             t = a.time
             bt = a.boost_time or 1
@@ -347,6 +401,13 @@ def analyze(replay, summary):
                 last = max(a.boost_series)
                 base["boostSeries"] = [a.boost_series.get(s) for s in range(last + 1)]
         players.append(base)
+
+    # Last resort: keys must be unique within a match (they are the database key per player row)
+    seen = Counter()
+    for p in players:
+        seen[p["key"]] += 1
+        if seen[p["key"]] > 1:
+            p["key"] = f"{p['key']}#{seen[p['key']]}"
 
     goals = []
     for g in summary["goals"]:

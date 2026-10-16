@@ -64,9 +64,14 @@ function showTip(html, x, y) {
 }
 function hideTip() { tip.style.display = "none"; }
 
-function barCell(value, color = "var(--accent)", max = 100, digits = 0) {
+function barCell(value, color = "var(--accent)", max = 100, digits = 0, title = "") {
   const w = value == null ? 0 : Math.max(0, Math.min(100, (value / max) * 100));
-  return `<div class="bar-cell"><span class="num">${round(value, digits)}</span><span class="bar-track"><i style="width:${w}%;background:${color}"></i></span></div>`;
+  return `<div class="bar-cell"${title ? ` title="${esc(title)}"` : ""}><span class="num">${round(value, digits)}</span><span class="bar-track"><i style="width:${w}%;background:${color}"></i></span></div>`;
+}
+
+function rawTitle(p, cat) {
+  const raw = p[`${cat}Raw`];
+  return raw == null ? "" : `Raw average ${round(raw, 1)} over ${p.matches} match${p.matches === 1 ? "" : "es"}`;
 }
 
 /* ---------- resize-aware charts ---------- */
@@ -276,8 +281,7 @@ function emptyState(text) {
 
 async function homePage() {
   const [stats, board, recent] = await Promise.all([api("/api/stats"), api("/api/players?min_matches=1"), api("/api/matches?limit=6")]);
-  const min = board.players.some((p) => p.matches >= 3) ? 3 : 1;
-  const top = board.players.filter((p) => p.matches >= min).slice(0, 6);
+  const top = board.players.slice(0, 6);
   app.innerHTML = `
     <section class="hero">
       <div>
@@ -292,9 +296,9 @@ async function homePage() {
     </section>
     <div class="grid-2">
       <section class="card">
-        <div class="card-head"><div><h2>Top players</h2><p>Average overall rating${min > 1 ? `, at least ${min} matches` : ""}</p></div><a href="#/leaderboard" class="btn">Leaderboard</a></div>
+        <div class="card-head"><div><h2>Top players</h2><p>Adjusted average overall rating</p></div><a href="#/leaderboard" class="btn">Leaderboard</a></div>
         ${top.length ? `<div class="table-wrap"><table><tbody>${top.map((p, i) => `
-          <tr class="clickable" data-href="${playerHref(p.key)}"><td class="n muted">${i + 1}</td><td><b>${esc(p.name)}</b> <span class="muted">· ${p.matches} match${p.matches > 1 ? "es" : ""}</span></td><td style="width:45%">${barCell(p.overall)}</td></tr>`).join("")}</tbody></table></div>` : emptyState("Upload replays to see ratings.")}
+          <tr class="clickable" data-href="${playerHref(p.key)}"><td class="n muted">${i + 1}</td><td><b>${esc(p.name)}</b> <span class="muted">· ${p.matches} match${p.matches > 1 ? "es" : ""}</span></td><td style="width:45%">${barCell(p.overall, undefined, 100, 0, rawTitle(p, "overall"))}</td></tr>`).join("")}</tbody></table></div>` : emptyState("Upload replays to see ratings.")}
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Recent matches</h2><p>Newest first</p></div><a href="#/matches" class="btn">All matches</a></div>
@@ -345,7 +349,7 @@ async function leaderboardPage() {
   const signal = pageAbort.signal;
 
   app.innerHTML = `
-    <div class="page-head"><div><h1>Leaderboard</h1><p class="sub">Average ratings across every match a player appears in. Click a column to sort.</p></div></div>
+    <div class="page-head"><div><h1>Leaderboard</h1><p class="sub">Average ratings across every match a player appears in, adjusted for how many matches they played (<a href="#/ratings">why</a>). Hover a rating for the raw average. Click a column to sort.</p></div></div>
     <section class="card filters">
       <div class="filter-players">
         <label class="filter-label" for="player-search">Players</label>
@@ -499,7 +503,7 @@ async function leaderboardPage() {
         <td class="n muted">${i + 1}</td>
         <td><b>${esc(p.name)}</b> <span class="muted">${esc(p.platform || "")}</span></td>
         <td class="n">${p.matches}</td><td class="n">${round(p.winRate)}%</td><td class="n">${p.mvps || 0}</td>
-        <td>${barCell(p.overall)}</td>${CATS.map((c) => `<td>${barCell(p[c])}</td>`).join("")}
+        <td>${barCell(p.overall, undefined, 100, 0, rawTitle(p, "overall"))}</td>${CATS.map((c) => `<td>${barCell(p[c], undefined, 100, 0, rawTitle(p, c))}</td>`).join("")}
         <td class="n">${p.goalsPer.toFixed(2)}</td><td class="n">${p.savesPer.toFixed(2)}</td></tr>`).join("")}</tbody></table>`;
     el.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
       const key = th.dataset.key;
@@ -686,9 +690,9 @@ async function playerPage(key) {
 
   app.innerHTML = `
     <div class="page-head"><div><h1>${esc(p.name)}</h1>
-      <p class="sub" style="margin:6px 0 0">${esc(p.platform || "")}${p.rank ? ` · Rank #${p.rank} of ${p.rankedPlayers}${p.rankMinMatches > 1 ? ` players with ${p.rankMinMatches}+ matches` : ""}` : ""}${p.aliases.length ? ` · Also played as ${p.aliases.map(esc).join(", ")}` : ""}</p></div></div>
+      <p class="sub" style="margin:6px 0 0">${esc(p.platform || "")}${p.rank ? ` · Rank #${p.rank} of ${p.rankedPlayers}` : ""}${p.aliases.length ? ` · Also played as ${p.aliases.map(esc).join(", ")}` : ""}</p></div></div>
     <div class="tiles">
-      <div class="tile"><div class="label">Overall rating</div><div class="value">${round(p.ratings.overall)}</div><div class="hint">Average of ${p.ratedMatches} rated</div></div>
+      <div class="tile"><div class="label">Overall rating</div><div class="value">${round(p.ratings.overall)}</div><div class="hint">Raw average ${round(p.ratingsRaw.overall)} over ${p.ratedMatches} rated</div></div>
       <div class="tile"><div class="label">Matches</div><div class="value">${p.matches}</div><div class="hint">${p.wins} wins · ${round(winRate)}%</div></div>
       <div class="tile"><div class="label">Best player</div><div class="value">${p.mvps}</div><div class="hint">times in a match</div></div>
       <div class="tile"><div class="label">Goals / match</div><div class="value">${perMatch(p.totals.goals, p.matches)}</div><div class="hint">${round(shooting)}% shooting</div></div>
@@ -697,9 +701,9 @@ async function playerPage(key) {
     </div>
     <div class="grid-2">
       <section class="card">
-        <div class="card-head"><div><h2>Ratings vs everyone</h2><p>Bar: ${esc(p.name)}'s average. Line: average of all rated players.</p></div></div>
+        <div class="card-head"><div><h2>Ratings vs everyone</h2><p>Bar: ${esc(p.name)}'s adjusted average. Line: average of all rated players.</p></div></div>
         ${["overall", ...CATS].map((c) => `<div class="compare-row"><span>${CAT_LABELS[c]}</span>
-          <div class="compare-track" data-tip="${esc(`${CAT_LABELS[c]}: ${round(p.ratings[c], 1)} (everyone: ${round(p.everyone[c], 1)})`)}"><span class="fill" style="width:${p.ratings[c] ?? 0}%"></span><span class="avg" style="left:calc(${p.everyone[c] ?? 0}% - 1px)"></span></div>
+          <div class="compare-track" data-tip="${esc(`${CAT_LABELS[c]}: ${round(p.ratings[c], 1)} (raw ${round(p.ratingsRaw[c], 1)}, everyone: ${round(p.everyone[c], 1)})`)}"><span class="fill" style="width:${p.ratings[c] ?? 0}%"></span><span class="avg" style="left:calc(${p.everyone[c] ?? 0}% - 1px)"></span></div>
           <b class="num" style="text-align:right">${round(p.ratings[c])}</b></div>`).join("")}
         <div class="legend"><span><i style="background:var(--accent)"></i>${esc(p.name)}</span><span><i style="background:var(--text);width:2px;height:12px"></i>All players</span></div>
         ${insight ? `<p class="insight">${insight}</p>` : ""}
@@ -753,23 +757,41 @@ async function playerPage(key) {
 
 async function ratingsPage() {
   const model = await api("/api/model");
-  const fmtRange = (lo, hi) => (lo > hi ? `${hi} best · ${lo} or worse scores 0` : `${lo} or less scores 0 · ${hi}+ scores 100`);
+  const modes = Object.keys(model.modes).sort();
+  const num = (v) => (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(Math.abs(v) >= 10 ? 1 : 2));
+  // A benchmark is [10th percentile, 90th percentile]; "lower is better" stats score 100 at the low end
+  const fmtBench = (b, higher) => (b == null ? `<span class="muted">not used</span>` : higher ? `${num(b[0])} → ${num(b[1])}` : `${num(b[1])} → ${num(b[0])}`);
+  const statTable = (parts) => `<div class="table-wrap"><table><thead><tr><th>Stat</th><th class="n">Weight</th>${modes.map((m) => `<th class="n">${mode(+m)}</th>`).join("")}</tr></thead><tbody>
+    ${parts.map((p) => `<tr><td>${esc(p.label)}${p.higherIsBetter ? "" : ` <span class="muted">(lower is better)</span>`}</td><td class="n">${Math.round(p.weight * 100)}%</td>${modes.map((m) => `<td class="n">${fmtBench(p.benchmarks[m], p.higherIsBetter)}</td>`).join("")}</tr>`).join("")}
+    </tbody></table></div>`;
+  const pct = (v) => `${Math.round(v * 100)}%`;
   app.innerHTML = `
     <div class="page-head"><div><h1>How ratings work</h1><p class="sub">Every player in every match gets a 0–100 rating per category. The leaderboard averages them across matches.</p></div></div>
     <section class="card">
       <h2 style="margin-bottom:8px">The idea</h2>
-      <p class="sub" style="margin:0 0 8px">Each stat is placed on a 0–100 scale between a low and a high benchmark, then the stats in a category are combined with the weights below.
-      Goals, shots, assists and saves are counted <b>per 5 minutes</b> on the field, so short matches and overtime are compared fairly.
+      <p class="sub" style="margin:0 0 8px">Each stat is compared with real matches of the <b>same mode</b> (1v1, 2v2, 3v3): a value at the 10th percentile of those matches scores 0, the 90th percentile scores 100, and everything in between is linear.
+      So 50 means roughly "a typical player in this mode". The stats in a category are then combined with the weights below.
+      Goals, shots, assists and goals conceded are counted <b>per 5 minutes</b> on the field, so short matches and overtime are compared fairly.
       Players with less than ${model.minSeconds} seconds on the field, and bots, aren't rated.</p>
-      <p class="sub" style="margin:0">The benchmarks are fixed, so a rating doesn't change when other people upload replays.
-      <b>Overall</b> = ${Object.entries(model.overallWeights).map(([k, w]) => `${Math.round(w * 100)}% ${k === "impact" ? "impact (in-game score per minute)" : CAT_LABELS[k].toLowerCase()}`).join(" + ")}.
-      The best player in a match is the one with the highest overall rating.</p>
+      <p class="sub" style="margin:0 0 8px"><b>Overall</b> = ${Object.entries(model.overallWeights).map(([k, w]) => `${pct(w)} ${k === "impact" ? "impact (in-game score per minute)" : CAT_LABELS[k].toLowerCase()}`).join(" + ")}.
+      The best player in a match is the one with the highest overall rating. A stat marked "not used" doesn't apply in that mode (e.g. assists in 1v1); the other stats' weights are scaled up.</p>
+      <p class="sub" style="margin:0 0 8px"><b>Small numbers are pulled toward the average.</b> Shooting % is calculated as if every player also took ${model.shotPrior} extra shots at the mode's average conversion, and save rate as if ${model.savePrior} extra opponent shots were saved at the average rate.
+      That way 1 goal from 1 shot isn't "100%" and 0 saves from 1 shot isn't "0%".</p>
+      <p class="sub" style="margin:0">On the leaderboard, each player's average is blended with the average of all players as if they had played ${model.leaderboardPriorMatches} extra average matches.
+      One great match is mostly luck, so a newcomer with a single 90 doesn't outrank someone who has averaged 56 over hundreds of matches. The more matches a player has, the closer the adjusted value is to their raw average (hover a rating to see it).</p>
+    </section>
+    <section class="card">
+      <h2 style="margin-bottom:8px">Benchmarks</h2>
+      <p class="sub" style="margin:0 0 12px">${model.calibratedAt ? `Calculated from ${model.calibrationMatches} matches on ${fmtDate(model.calibratedAt, false)}.` : ""}
+      They stay fixed until someone runs <code>rocket-assistant calibrate</code>, so a rating doesn't change when other people upload replays. Recalibrating re-rates every stored match.</p>
+      <div class="table-wrap"><table><thead><tr><th>Mode</th><th class="n">Player-matches</th><th class="n">Avg. shooting %</th><th class="n">Avg. saves per opponent shot</th></tr></thead><tbody>
+      ${modes.map((m) => `<tr><td>${mode(+m)}</td><td class="n">${model.modes[m].rows}</td><td class="n">${pct(model.modes[m].priors.shooting)}</td><td class="n">${pct(model.modes[m].priors.saveRate)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <p class="sub" style="margin:12px 0 0">Columns below show the value that scores 0 → the value that scores 100 in each mode. Other modes (like 4v4) use the closest calibrated mode.</p>
     </section>
     <div class="grid-2">${Object.entries(model.categories).map(([cat, parts]) => `
-      <section class="card model-cat"><h2 style="margin-bottom:12px">${CAT_LABELS[cat]}</h2>
-        <div class="table-wrap"><table><thead><tr><th>Stat</th><th class="n">Weight</th><th>Scale</th></tr></thead><tbody>
-        ${parts.map((p) => `<tr><td>${esc(p.label)}</td><td class="n">${Math.round(p.weight * 100)}%</td><td class="muted">${fmtRange(p.low, p.high)}</td></tr>`).join("")}
-        </tbody></table></div></section>`).join("")}
+      <section class="card model-cat"><h2 style="margin-bottom:12px">${CAT_LABELS[cat]} <span class="muted" style="font-weight:400">· ${pct(model.overallWeights[cat])} of overall</span></h2>${statTable(parts)}</section>`).join("")}
+      <section class="card model-cat"><h2 style="margin-bottom:12px">Impact <span class="muted" style="font-weight:400">· ${pct(model.overallWeights.impact)} of overall</span></h2>${statTable([model.impact])}</section>
     </div>`;
 }
 

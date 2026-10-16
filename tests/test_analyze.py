@@ -34,3 +34,16 @@ def test_summarize_reads_header():
     assert s["players"][0]["key"] == "steam:1"
     assert s["players"][0]["platform"] == "Steam"
     assert s["goals"] == [{"player": "A", "team": 0, "frame": 10}]
+
+
+def test_network_key_matches_header_key_format():
+    from rocket_assistant.analyze import _network_key
+
+    assert _network_key({"remote_id": {"Epic": "abc"}, "local_id": 0}) == "epic:abc"
+    assert _network_key({"remote_id": {"Steam": "765"}}) == "steam:765"
+    assert _network_key({"remote_id": {"PlayStation": {"online_id": "42", "name": "x"}}}) == "ps4:42"
+    assert _network_key({"remote_id": {"Xbox": "99"}}) == "dingo:99"
+    assert _network_key({"remote_id": {"PsyNet": {"online_id": "7"}}}) == "nnx:7"
+    assert _network_key({"remote_id": {"Steam": "765"}, "local_id": 1}) == "steam:765:1"  # split-screen guest
+    assert _network_key({"remote_id": {"Steam": "0"}}) is None
+    assert _network_key(None) is None

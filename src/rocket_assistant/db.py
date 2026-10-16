@@ -4,6 +4,7 @@ import sqlite3
 from contextlib import contextmanager
 
 from .config import DB_PATH
+from .ratings import LEADERBOARD_PRIOR_MATCHES
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS matches (
@@ -85,7 +86,8 @@ def save_match(match_id, analysis, file_name, uploaded_at, analyzer_version):
              analysis.get("ratingVersion"), json.dumps(analysis, separators=(",", ":"))))
         for p in analysis["players"]:
             r = p.get("ratings") or {}
-            won = None if score[0] == score[1] else int(score[p["team"]] > score[1 - p["team"]])
+            team = p["team"]
+            won = None if score[0] == score[1] or team not in (0, 1) else int(score[team] > score[1 - team])
             conn.execute(
                 """INSERT OR REPLACE INTO match_players VALUES
                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -146,13 +148,7 @@ def leaderboard(min_matches=1, team_size=None, since=None, players=None, togethe
     team_size / since (ISO date) limit which matches count; players limits the output to those keys;
     together counts only matches where a player had another of `players` on their team.
     """
-    where, params = ["mp.bot = 0", "mp.overall IS NOT NULL"], []
-    if team_size:
-        where.append("m.team_size = ?")
-        params.append(team_size)
-    if since:
-        where.append("m.played_at >= ?")
-        params.append(since)
+    where, params = _base_filters(team_size, since)
     if players:
         marks = ",".join("?" * len(players))
         where.append(f"mp.player_key IN ({marks})")
@@ -170,20 +166,50 @@ def leaderboard(min_matches=1, team_size=None, since=None, players=None, togethe
                       COUNT(*) AS matches, SUM(mp.won) AS wins, SUM(mp.is_best) AS mvps,
                       SUM(mp.goals) AS goals, SUM(mp.assists) AS assists, SUM(mp.saves) AS saves,
                       SUM(mp.shots) AS shots, SUM(mp.demos) AS demos, SUM(mp.seconds) AS seconds,
-                      AVG(mp.overall) AS overall, AVG(mp.attack) AS attack, AVG(mp.defence) AS defence,
-                      AVG(mp.boost) AS boost, AVG(mp.speed) AS speed
+                      """ + ", ".join(f"AVG(mp.{c}) AS {c}, COUNT(mp.{c}) AS n_{c}" for c in RATING_COLUMNS) + """
                FROM match_players mp JOIN matches m ON m.id = mp.match_id
                WHERE """ + " AND ".join(where) + """
                GROUP BY mp.player_key
-               HAVING COUNT(*) >= ?
-               ORDER BY overall DESC""", (*params, min_matches)).fetchall()
-    return [_round_row(dict(r)) for r in rows]
+               HAVING COUNT(*) >= ?""", (*params, min_matches)).fetchall()
+    means = rating_means(team_size, since)
+    board = [_shrink(dict(r), means) for r in rows]
+    board.sort(key=lambda r: r["overall"] if r["overall"] is not None else -1, reverse=True)
+    return board
 
 
-def _round_row(row):
+def _base_filters(team_size=None, since=None):
+    where, params = ["mp.bot = 0", "mp.overall IS NOT NULL"], []
+    if team_size:
+        where.append("m.team_size = ?")
+        params.append(team_size)
+    if since:
+        where.append("m.played_at >= ?")
+        params.append(since)
+    return where, params
+
+
+def rating_means(team_size=None, since=None):
+    """Average per-match rating of all rated players (within the same mode/period filters)."""
+    where, params = _base_filters(team_size, since)
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT " + ", ".join(f"AVG(mp.{c}) AS {c}" for c in RATING_COLUMNS) +
+            " FROM match_players mp JOIN matches m ON m.id = mp.match_id WHERE " + " AND ".join(where),
+            params).fetchone()
+    return {c: row[c] for c in RATING_COLUMNS}
+
+
+def _shrink(row, means):
+    """Pull a player's average toward the population mean: with few matches it says little about them.
+
+    Adds the plain average as `<category>Raw`; `<category>` becomes the adjusted value used for ranking.
+    """
+    k = LEADERBOARD_PRIOR_MATCHES
     for c in RATING_COLUMNS:
-        if row.get(c) is not None:
-            row[c] = round(row[c], 1)
+        n, raw, mean = row.pop(f"n_{c}"), row[c], means[c]
+        row[f"{c}Raw"] = round(raw, 1) if raw is not None else None
+        if raw is not None and mean is not None:
+            row[c] = round((n * raw + k * mean) / (n + k), 1)
     return row
 
 
